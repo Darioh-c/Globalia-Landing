@@ -226,95 +226,6 @@
     io.observe(grid);
   }
 
-  /* Resi demo: the conversation is typed, the orb structures it, the record fills in, the doctor signs. Loops while visible. */
-  function resiDemo(root) {
-    var lines = [
-      ['doc', 'What brings you in today?'],
-      ['pat', 'Pressure in my chest since Friday. Sometimes it goes to my left arm.'],
-      ['doc', 'Are you taking anything for blood pressure?'],
-      ['pat', 'I stopped the pills a few months ago.'],
-      ['doc', 'Your pressure is 140 over 90. I will order an ECG and troponins.']
-    ];
-    var fields = [
-      ['reason', 'Chest pressure since Friday, radiating to the left arm'],
-      ['vitals', 'BP 140/90'],
-      ['history', 'Hypertension, off treatment'],
-      ['plan', 'ECG. Troponins.']
-    ];
-    var talk = root.querySelector('.r-lines'), status = root.querySelector('.r-status');
-    if (!talk || !status) return;
-    var vals = {}, k;
-    for (k = 0; k < fields.length; k++) vals[fields[k][0]] = root.querySelector('[data-field="' + fields[k][0] + '"]');
-    var timer = 0, active = false, visible = false;
-    function later(fn, ms) { timer = window.setTimeout(fn, ms); }
-    function setState(s) { root.classList.remove('listening', 'thinking', 'signed'); if (s) root.classList.add(s); }
-    function lineRow(who, text) {
-      var row = document.createElement('div');
-      row.className = 'r-line ' + who;
-      row.innerHTML = '<span class="who">' + (who === 'doc' ? 'Doctor' : 'Patient') + '</span><span class="txt"></span>';
-      row.lastChild.textContent = text;
-      return row;
-    }
-    function reset() {
-      root.classList.remove('fade');
-      talk.innerHTML = '';
-      for (var f = 0; f < fields.length; f++) { vals[fields[f][0]].textContent = ''; vals[fields[f][0]].parentNode.classList.remove('on'); }
-    }
-    function typeInto(el, text, speed, done) {
-      var i = 0;
-      el.classList.add('typing');
-      (function tick() {
-        if (!active) return;
-        i++;
-        el.textContent = text.slice(0, i);
-        if (i < text.length) later(tick, speed); else { el.classList.remove('typing'); done(); }
-      })();
-    }
-    function sayLine(n) {
-      if (!active) return;
-      if (n >= lines.length) {
-        setState('thinking'); status.textContent = 'Structuring';
-        later(function () { fillField(0); }, 1500);
-        return;
-      }
-      var row = lineRow(lines[n][0], '');
-      talk.appendChild(row);
-      typeInto(row.lastChild, lines[n][1], 26, function () { later(function () { sayLine(n + 1); }, 420); });
-    }
-    function fillField(n) {
-      if (!active) return;
-      if (n >= fields.length) {
-        setState('signed'); status.textContent = 'Signed';
-        later(function () { root.classList.add('fade'); later(start, 600); }, 3600);
-        return;
-      }
-      var el = vals[fields[n][0]];
-      el.parentNode.classList.add('on');
-      typeInto(el, fields[n][1], 18, function () { later(function () { fillField(n + 1); }, 280); });
-    }
-    function start() {
-      if (!active) return;
-      reset();
-      setState('listening'); status.textContent = 'Listening';
-      later(function () { sayLine(0); }, 500);
-    }
-    function finalState() {
-      reset();
-      for (var l = 0; l < lines.length; l++) talk.appendChild(lineRow(lines[l][0], lines[l][1]));
-      for (var f = 0; f < fields.length; f++) { vals[fields[f][0]].textContent = fields[f][1]; vals[fields[f][0]].parentNode.classList.add('on'); }
-      setState('signed'); status.textContent = 'Signed';
-    }
-    function play() { if (active) return; active = true; start(); }
-    function pause() { active = false; window.clearTimeout(timer); }
-    if (reduced) { finalState(); return; }
-    if ('IntersectionObserver' in window) {
-      new IntersectionObserver(function (entries) {
-        entries.forEach(function (e) { visible = e.isIntersecting; if (visible) play(); else pause(); });
-      }, { threshold: 0.25 }).observe(root);
-    } else { visible = true; play(); }
-    document.addEventListener('visibilitychange', function () { if (document.hidden) pause(); else if (visible) play(); });
-  }
-
   /* Copy buttons: copy the text in data-copy, fall back to selecting it. */
   function copyButtons() {
     var buttons = document.querySelectorAll('[data-copy]');
@@ -341,14 +252,20 @@
     });
   }
 
-  /* Current page in the nav. */
+  /* Nav: mark the link of the section on screen. */
   function currentLink() {
-    var file = (location.pathname.split('/').pop() || 'index.html').toLowerCase();
-    var links = document.querySelectorAll('.nav .links a[href]');
-    Array.prototype.forEach.call(links, function (a) {
-      var href = (a.getAttribute('href') || '').toLowerCase();
-      if (href === file) a.setAttribute('aria-current', 'page');
-    });
+    if (!('IntersectionObserver' in window)) return;
+    var links = document.querySelectorAll('.nav .links a[href^="#"]:not(.pill)');
+    var map = {};
+    Array.prototype.forEach.call(links, function (a) { map[a.getAttribute('href').slice(1)] = a; });
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (e) {
+        var a = map[e.target.id];
+        if (!a) return;
+        if (e.isIntersecting) a.setAttribute('aria-current', 'true'); else a.removeAttribute('aria-current');
+      });
+    }, { rootMargin: '-45% 0px -45% 0px' });
+    Object.keys(map).forEach(function (id) { var s = document.getElementById(id); if (s) io.observe(s); });
   }
 
   function init() {
@@ -357,7 +274,6 @@
     Array.prototype.forEach.call(document.querySelectorAll('canvas.brain'), brain);
     Array.prototype.forEach.call(document.querySelectorAll('[data-flow]'), wires);
     Array.prototype.forEach.call(document.querySelectorAll('[data-dots]'), gapDots);
-    Array.prototype.forEach.call(document.querySelectorAll('[data-resi-demo]'), resiDemo);
     copyButtons();
     currentLink();
   }
